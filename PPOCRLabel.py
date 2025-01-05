@@ -71,6 +71,7 @@ sys.path.append(os.path.join(__dir__, ""))
 
 from paddleocr import PaddleOCR, PPStructure
 import libs.resources
+from libs.resources import *
 from libs.constants import (
     SETTING_ADVANCE_MODE,
     SETTING_DRAW_SQUARE,
@@ -118,6 +119,7 @@ from libs.hashableQListWidgetItem import HashableQListWidgetItem
 from libs.editinlist import EditInList
 from libs.unique_label_qlist_widget import UniqueLabelQListWidget
 from libs.keyDialog import KeyDialog
+from libs.baiduCloudOcr import BaiduCloudOCR
 
 __appname__ = "PPOCRLabel"
 
@@ -197,6 +199,7 @@ class MainWindow(QMainWindow):
         self.table_ocr = PPStructure(
             use_pdserving=False, use_gpu=gpu, lang=lang, layout=False, show_log=False
         )
+        self.baiduOcr = BaiduCloudOCR()
 
         if os.path.exists("./data/paddle.png"):
             result = self.ocr.ocr("./data/paddle.png", cls=True, det=True)
@@ -241,6 +244,8 @@ class MainWindow(QMainWindow):
         self.model = "paddle"
         self.PPreader = None
         self.autoSaveNum = 5
+
+        self.useBaiduOcr = False
 
         #  ================== File List  ==================
 
@@ -537,6 +542,15 @@ class MainWindow(QMainWindow):
             "Ctrl+M",
             "next",
             getStr("tipchoosemodel"),
+        )
+
+        useBaiduOcr = action(
+            getStr("usebaiduocr"),
+            self.onUseBaiduOcr,
+            "Ctrl+B",
+            None,
+            getStr("tipusebaiduocr"),
+            True
         )
 
         deleteImg = action(
@@ -1107,7 +1121,7 @@ class MainWindow(QMainWindow):
             ),
         )
 
-        addActions(self.menus.autolabel, (AutoRec, reRec, cellreRec, alcm, None, help))
+        addActions(self.menus.autolabel, (AutoRec, reRec, cellreRec, alcm, useBaiduOcr, None, help))
 
         self.menus.file.aboutToShow.connect(self.updateFileMenu)
 
@@ -2802,13 +2816,16 @@ class MainWindow(QMainWindow):
             return filePath
         return filepathsplit[0] + "/" + filepathsplit[1]
 
+    def get_ocr(self):
+        return self.baiduOcr if self.useBaiduOcr else self.ocr
+
     def autoRecognition(self):
         assert self.mImgList is not None
         print("Using model from ", self.model)
 
         uncheckedList = [i for i in self.mImgList if i not in self.fileStatedict.keys()]
         self.autoDialog = AutoDialog(
-            parent=self, ocr=self.ocr, mImgList=uncheckedList, lenbar=len(uncheckedList)
+            parent=self, ocr=self.get_ocr(), mImgList=uncheckedList, lenbar=len(uncheckedList)
         )
         self.autoDialog.popUp()
         self.currIndex = len(self.mImgList) - 1
@@ -3237,6 +3254,9 @@ class MainWindow(QMainWindow):
         if self.filePath:
             self.AutoRecognition.setEnabled(True)
             self.actions.AutoRec.setEnabled(True)
+
+    def onUseBaiduOcr(self, checked):
+        self.useBaiduOcr = checked
 
     def modelChoose(self):
         current_text = self.comboBox.currentText()

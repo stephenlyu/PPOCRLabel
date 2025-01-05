@@ -163,3 +163,4 @@ cython_debug/
 
 .baidu-ocr
 .baidu_key.yaml
+tmp

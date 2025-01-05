@@ -86,7 +86,34 @@ class BaiduCloudOCR:
         params = {"grant_type": "client_credentials", "client_id": self.api_key, "client_secret": self.secret_key}
         return str(requests.post(url, params=params).json().get("access_token"))
 
+    @staticmethod
+    def to_ppocr_result(result):
+        ret = []
+        for o in result.get('words_result', []):
+            loc = o['location']
+            left = loc['left']
+            top = loc['top']
+            right = loc['left'] + loc['width']
+            bottom = loc['top'] + loc['height']
+            box = [
+                [left, top],
+                [right, top],
+                [right, bottom],
+                [left, bottom],
+            ]
+            text = o.get('words', '')
+            prob = o.get('probability', {}).get('average', 0.9)
+            ret.append([box, [text, prob]])
+        return [ret]
+
+    def ocr(self, image_file, **kwargs):
+        try:
+            result = self.recognize(image_file)
+            return self.to_ppocr_result(result)
+        except:
+            return [[]]
+
 if __name__ == '__main__':
     ocr = BaiduCloudOCR()
     result = ocr.recognize(r'D:\data\tmp\test\5ecbc37011f8a2a7eb502ec8_1.jpg')
-    # print(json.dumps(result, indent=2, ensure_ascii=True))
+    print(json.dumps(ocr.to_ppocr_result(result), indent=2, ensure_ascii=False))
