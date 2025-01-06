@@ -1,6 +1,6 @@
 # ex: set ts=8 noet:
 
-all: qt5 test
+all: qt5 uic test
 
 test: testpy3
 
@@ -23,8 +23,17 @@ qt4py3:
 qt5py3:
 	pyrcc5 -o libs/resources.py resources.qrc
 
+UI_DIR=libs/ui
+UI_FILES := $(wildcard $(UI_DIR)/*.ui)
+PY_FILES = $(patsubst $(UI_DIR)/%.ui, $(UI_DIR)/%.py, $(UI_FILES))
+
+$(UI_DIR)/%.py: $(UI_DIR)/%.ui
+	pyuic5 $< -o $@
+
+uic: $(PY_FILES)
+
 clean:
-	rm -rf ~/.labelImgSettings.pkl *.pyc dist labelImg.egg-info __pycache__ build
+	rm -rf ~/.labelImgSettings.pkl *.pyc dist labelImg.egg-info __pycache__ build libs/ui/*.py
 
 pip_upload:
 	python3 setup.py upload
