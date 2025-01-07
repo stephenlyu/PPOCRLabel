@@ -38,7 +38,15 @@ from PyQt5.QtCore import (
     QPointF,
     QProcess,
 )
-from PyQt5.QtGui import QImage, QCursor, QPixmap, QImageReader, QColor, QIcon
+from PyQt5.QtGui import (
+    QImage,
+    QCursor,
+    QPixmap,
+    QImageReader,
+    QColor,
+    QIcon,
+    QFontDatabase,
+)
 from PyQt5.QtWidgets import (
     QMainWindow,
     QListWidget,
@@ -143,6 +151,8 @@ class MainWindow(QMainWindow):
         rec_model_dir=None,
         rec_char_dict_path=None,
         cls_model_dir=None,
+        label_font_path=None,
+        selected_shape_color=(255, 255, 0),
     ):
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
@@ -1204,6 +1214,18 @@ class MainWindow(QMainWindow):
         if self.filePath and os.path.isdir(self.filePath):
             self.openDirDialog(dirpath=self.filePath, silent=True)
 
+        # load label font
+        self.label_font_family = None
+        if label_font_path is not None:
+            label_font_id = QFontDatabase.addApplicationFont(label_font_path)
+            if label_font_id >= 0:
+                self.label_font_family = QFontDatabase.applicationFontFamilies(
+                    label_font_id
+                )[0]
+
+        # selected shape color
+        self.selected_shape_color = selected_shape_color
+
     def menu(self, title, actions=None):
         menu = self.menuBar().addMenu(title)
         if actions:
@@ -1654,7 +1676,12 @@ class MainWindow(QMainWindow):
         s = []
         shape_index = 0
         for label, points, line_color, key_cls, difficult in shapes:
-            shape = Shape(label=label, line_color=line_color, key_cls=key_cls)
+            shape = Shape(
+                label=label,
+                line_color=line_color,
+                key_cls=key_cls,
+                font_family=self.label_font_family,
+            )
             for x, y in points:
                 # Ensure the labels are within the bounds of the image. If not, fix them.
                 x, y, snapped = self.canvas.snapPointToCanvas(x, y)
@@ -1931,7 +1958,11 @@ class MainWindow(QMainWindow):
         shape.vertex_fill_color = QColor(r, g, b)
         shape.hvertex_fill_color = QColor(255, 255, 255)
         shape.fill_color = QColor(r, g, b, 32)
-        shape.select_line_color = QColor(255, 255, 255)
+        shape.select_line_color = QColor(
+            self.selected_shape_color[0],
+            self.selected_shape_color[1],
+            self.selected_shape_color[2],
+        )
         shape.select_fill_color = QColor(r, g, b, 32)
 
     def _get_rgb_by_label(self, label, kie_mode):
@@ -2413,11 +2444,15 @@ class MainWindow(QMainWindow):
         )
         self.statusBar().show()
 
+        imgListCurrIndex = None
+        if self.filePath != None:
+            imgListCurrIndex = self.mImgList.index(self.filePath)
+
         self.filePath = None
         self.fileListWidget.clear()
         self.mImgList = self.scanAllImages(dirpath)
         self.mImgList5 = self.mImgList[:5]
-        self.openNextImg()
+        self.openNextImg(imgListCurrIndex=imgListCurrIndex)
         doneicon = newIcon("done")
         closeicon = newIcon("close")
         for imgPath in self.mImgList:
@@ -2443,9 +2478,18 @@ class MainWindow(QMainWindow):
         self.actions.rotateLeft.setEnabled(True)
         self.actions.rotateRight.setEnabled(True)
 
-        self.fileListWidget.setCurrentRow(0)  # set list index to first
+        fileListWidgetCurrentRow = 0
+        if imgListCurrIndex is not None:
+            fileListWidgetCurrentRow = imgListCurrIndex
+            if fileListWidgetCurrentRow >= self.fileListWidget.count():
+                fileListWidgetCurrentRow = fileListWidgetCurrentRow - 1
+
+        self.fileListWidget.setCurrentRow(
+            fileListWidgetCurrentRow
+        )  # set list index to first
         self.fileDock.setWindowTitle(
-            self.fileListName + f" (1/{self.fileListWidget.count()})"
+            self.fileListName
+            + f" ({fileListWidgetCurrentRow+1}/{self.fileListWidget.count()})"
         )  # show image count
 
     def openPrevImg(self, _value=False):
@@ -2463,7 +2507,7 @@ class MainWindow(QMainWindow):
             if filename:
                 self.loadFile(filename)
 
-    def openNextImg(self, _value=False):
+    def openNextImg(self, _value=False, imgListCurrIndex=None):
         if not self.mayContinue():
             return
 
@@ -2471,15 +2515,20 @@ class MainWindow(QMainWindow):
             return
 
         filename = None
-        if self.filePath is None:
+        if self.filePath is None and imgListCurrIndex is None:
             filename = self.mImgList[0]
             self.mImgList5 = self.mImgList[:5]
         else:
-            currIndex = self.mImgList.index(self.filePath)
+            if imgListCurrIndex is None:
+                currIndex = self.mImgList.index(self.filePath)
+            else:
+                currIndex = imgListCurrIndex - 1
+
             if currIndex + 1 < len(self.mImgList):
                 filename = self.mImgList[currIndex + 1]
                 self.mImgList5 = self.indexTo5Files(currIndex + 1)
             else:
+                filename = self.mImgList[currIndex]
                 self.mImgList5 = self.indexTo5Files(currIndex)
         if filename:
             print("file name in openNext is ", filename)
@@ -2598,7 +2647,7 @@ class MainWindow(QMainWindow):
                 imgidx = self.getImglabelidx(self.filePath)
                 if imgidx in self.PPlabel.keys():
                     self.PPlabel.pop(imgidx)
-                self.openNextImg()
+
                 self.importDirImages(self.lastOpenDir, isDelete=True)
 
     def deleteImgDialog(self):
@@ -3150,7 +3199,6 @@ class MainWindow(QMainWindow):
         """
         export PPLabel and CSV to JSON (PubTabNet)
         """
-        import pandas as pd
 
         # automatically save annotations
         self.saveFilestate()
@@ -3562,6 +3610,14 @@ def str2bool(v):
     return v.lower() in ("true", "t", "1")
 
 
+def parse_rgb(value):
+    r, g, b = value.split(",")
+    r, g, b = int(r), int(g), int(b)
+    if not (0 <= r <= 255 and 0 <= g <= 255 and 0 <= b <= 255):
+        raise argparse.ArgumentTypeError("RGB values must be between 0 and 255.")
+    return (r, g, b)
+
+
 def get_main_app(argv=[]):
     """
     Standard boilerplate Qt application code.
@@ -3592,6 +3648,14 @@ def get_main_app(argv=[]):
     arg_parser.add_argument(
         "--bbox_auto_zoom_center", type=str2bool, default=False, nargs="?"
     )
+    arg_parser.add_argument("--label_font_path", type=str, default=None, nargs="?")
+    arg_parser.add_argument(
+        "--selected_shape_color",
+        type=parse_rgb,
+        default="255,255,0",
+        nargs="?",
+        help='An RGB value as "R,G,B".',
+    )
 
     args = arg_parser.parse_args(argv[1:])
 
@@ -3606,6 +3670,8 @@ def get_main_app(argv=[]):
         rec_char_dict_path=args.rec_char_dict_path,
         cls_model_dir=args.cls_model_dir,
         bbox_auto_zoom_center=args.bbox_auto_zoom_center,
+        label_font_path=args.label_font_path,
+        selected_shape_color=args.selected_shape_color,
     )
     win.show()
     return app, win
