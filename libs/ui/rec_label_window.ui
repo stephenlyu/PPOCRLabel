@@ -202,7 +202,14 @@
     <addaction name="action_C"/>
     <addaction name="menuHistory"/>
    </widget>
+   <widget class="QMenu" name="menu">
+    <property name="title">
+     <string>编辑</string>
+    </property>
+    <addaction name="action_D"/>
+   </widget>
    <addaction name="menu_F"/>
+   <addaction name="menu"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="action_O">
@@ -228,6 +235,14 @@
   <action name="actionClearHistory">
    <property name="text">
     <string>清除历史</string>
+   </property>
+  </action>
+  <action name="action_D">
+   <property name="text">
+    <string>删除(&amp;D)</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+D</string>
    </property>
   </action>
  </widget>

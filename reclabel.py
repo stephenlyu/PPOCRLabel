@@ -11,6 +11,7 @@ from libs.ui.rec_label_window import Ui_MainWindow  # 导入生成的 UI 类
 
 cache_dir = '.cache'
 max_samples = 20000
+max_history = 10
 
 class History:
     def __init__(self):
@@ -30,6 +31,8 @@ class History:
         if s in self.history:
             self.history.remove(s)            
         self.history.insert(0, s)
+        if len(self.history) > max_history:
+            self.history = self.history[:max_history]
         self._flush()
     
     def clear(self):
@@ -50,6 +53,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.action_C.setEnabled(False)        
         self.action_E.triggered.connect(self.onExport)
         self.action_E.setEnabled(False)
+        self.action_D.triggered.connect(self.onDelete)
+        self.action_D.setEnabled(False)
 
         self.history = History()
         self.label_file = None
@@ -69,6 +74,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         for i, his in enumerate(self.history.history):
             if his == self.label_file:
                 self.his_actions[i].setChecked(True)
+            else:
+                self.his_actions[i].setChecked(False)
 
     def build_history_menu(self):
         self.menuHistory.clear()
@@ -177,10 +184,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def on_selection_changed(self, selected, deselected):
         selected_indexes = self.listView.selectionModel().selectedIndexes()        
+        self.current_label_index = selected_indexes[0].row()
         image, label = self.labels[selected_indexes[0].row()]
         self.load_image(os.path.join(self.image_root, image))
         self.textEdit.setText(label)
-        self.lblLabelLen.setText('标签字符数: %d' % len(label))
+        self.lblLabelLen.setText('标签字符数: %d' % len(label))        
 
     def on_text_changed(self):
         image, text = self.labels[self.current_label_index] 
@@ -201,7 +209,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.statusBar().showMessage('')
         self.action_C.setEnabled(False)      
         self.action_E.setEnabled(False)      
+        self.action_D.setEnabled(False)
         self.set_label_changed(False)
+        self.update_history()
 
     def project_file(self):
         return self.label_file + '.prj'
@@ -239,7 +249,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.history.add(self.label_file)
         self.build_history_menu()
         self.action_C.setEnabled(True)        
-        self.action_E.setEnabled(True)        
+        self.action_E.setEnabled(True)  
+        if len(self.labels) > 0:      
+            self.action_D.setEnabled(True)
 
     def load_prev_open_dir(self):
         file = os.path.join(cache_dir, 'prev_open_dir')
@@ -305,6 +317,19 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.onSave()
             shutil.copyfile(self.project_file(), file_name)
             QtWidgets.QMessageBox.information(self, "信息", "文件导出成功。")    
+
+    def onDelete(self):
+        if self.current_label_index >=0 and self.current_label_index < len(self.labels):
+            self.labels.pop(self.current_label_index)
+            if self.listModel:
+                self.listModel.takeRow(self.current_label_index)
+            if self.current_label_index >= len(self.labels):
+                self.current_label_index = len(self.labels) - 1
+            if self.current_label_index >= 0:
+                index = self.listModel.index(self.current_label_index, 0)  # 第 3 项的索引
+                self.listView.selectionModel().setCurrentIndex(index, QtCore.QItemSelectionModel.Select)
+            else:
+                self.action_D.setEnabled(False)
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)  # 创建应用程序对象
