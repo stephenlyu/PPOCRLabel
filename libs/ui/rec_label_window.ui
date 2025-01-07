@@ -207,6 +207,7 @@
      <string>编辑</string>
     </property>
     <addaction name="action_D"/>
+    <addaction name="action_P"/>
    </widget>
    <addaction name="menu_F"/>
    <addaction name="menu"/>
@@ -243,6 +244,17 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+D</string>
+   </property>
+  </action>
+  <action name="action_P">
+   <property name="text">
+    <string>图片分段(&amp;P)</string>
+   </property>
+   <property name="toolTip">
+    <string>将长图片切成适合训练的长宽比的小图像</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+P</string>
    </property>
   </action>
  </widget>

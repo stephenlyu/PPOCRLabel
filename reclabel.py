@@ -1,6 +1,7 @@
 import sys
 import os
 import shutil
+import cv2
 __dir__ = os.path.dirname(__file__)
 sys.path.append(os.path.join(__dir__, ""))
 
@@ -8,6 +9,7 @@ from PyQt5 import QtWidgets
 from PyQt5 import QtGui
 from PyQt5 import QtCore
 from libs.ui.rec_label_window import Ui_MainWindow  # 导入生成的 UI 类
+from libs.rec_image_split_view import RecImageSplitDialog
 
 cache_dir = '.cache'
 max_samples = 20000
@@ -55,6 +57,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.action_E.setEnabled(False)
         self.action_D.triggered.connect(self.onDelete)
         self.action_D.setEnabled(False)
+        self.action_P.triggered.connect(self.onPartitionImage)
+        self.action_P.setEnabled(False)
 
         self.history = History()
         self.label_file = None
@@ -141,6 +145,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         return int(max_width*0.7)
 
+    def update_ui(self):
+        self.statusBar().showMessage('样本数量%d' % len(self.labels))
+
     def render_labels(self):
         self.reset_state()
         self.listModel = QtGui.QStandardItemModel()
@@ -158,7 +165,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if max_width < 100:
             max_width = 100
         self.listView.setMinimumWidth(max_width)
-        self.statusBar().showMessage('样本数量%d' % len(self.labels))
+        self.update_ui()
 
         if self.labels:
             self.current_label_index = 0
@@ -210,6 +217,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.action_C.setEnabled(False)      
         self.action_E.setEnabled(False)      
         self.action_D.setEnabled(False)
+        self.action_P.setEnabled(False)
         self.set_label_changed(False)
         self.update_history()
 
@@ -252,6 +260,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.action_E.setEnabled(True)  
         if len(self.labels) > 0:      
             self.action_D.setEnabled(True)
+            self.action_P.setEnabled(True)
 
     def load_prev_open_dir(self):
         file = os.path.join(cache_dir, 'prev_open_dir')
@@ -330,6 +339,57 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.listView.selectionModel().setCurrentIndex(index, QtCore.QItemSelectionModel.Select)
             else:
                 self.action_D.setEnabled(False)
+                self.action_P.setEnabled(False)
+
+    def onPartitionImage(self):
+        image_file, text = self.labels[self.current_label_index]
+        full_image_file = os.path.join(self.image_root, image_file)
+        dialog = RecImageSplitDialog(full_image_file, text)
+        ret = dialog.exec_()
+        if ret  != QtWidgets.QDialog.Accepted:
+            return
+        positions, texts = dialog.get_data()        
+        img = cv2.imread(full_image_file)
+        image_dir = os.path.dirname(full_image_file)
+        m, ext = os.path.splitext(os.path.basename(full_image_file))
+        rel_image_dir = os.path.dirname(image_file)
+
+        def get_next_name(index):
+            while True:
+                dest_file_path = os.path.join(image_dir, '%s-%d%s' % (m, index, ext))
+                if not os.path.exists(dest_file_path):
+                    return dest_file_path, index
+                index += 1
+
+        def normalize_path(p):
+            return p.replace('\\', '/', -1)
+
+        new_labels = []
+        index = 0
+        from_x = 0
+        for i, x in enumerate(positions):
+            label = texts[i]
+            dest_image, index = get_next_name(index+1)
+            cv2.imwrite(dest_image, img[:, from_x:x, :])
+            new_labels.append((normalize_path(os.path.join(rel_image_dir, os.path.basename(dest_image))), label))
+            from_x = x
+            if i == len(positions) - 1:
+                dest_image, index = get_next_name(index+1)
+                cv2.imwrite(dest_image, img[:, from_x:, :])
+                new_labels.append((normalize_path(os.path.join(rel_image_dir, os.path.basename(dest_image))), texts[-1]))
+
+        for i, o in enumerate(new_labels):
+            self.labels.insert(self.current_label_index+i+1, o)
+            standard_item = QtGui.QStandardItem(o[0])
+            self.listModel.insertRow(self.current_label_index+i+1, standard_item)
+        
+        self.labels.pop(self.current_label_index)
+        self.listModel.removeRow(self.current_label_index)        
+        
+        index = self.listModel.index(self.current_label_index, 0)  # 第 3 项的索引
+        self.listView.selectionModel().setCurrentIndex(index, QtCore.QItemSelectionModel.Select)
+        self.set_label_changed(True)
+        self.update_ui()
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)  # 创建应用程序对象
